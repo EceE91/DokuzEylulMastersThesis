@@ -18,13 +18,14 @@ balanced.sample <- function(pData, n) {
     return(training.set)
 }
 
+TCGA.start = Gbm.RPPA[5:39]
 
 # read GBM RPPA
 Gbm.RPPA = read.csv("GBM-RPPA-CommonPatients-Normalized-v2.csv",header=T)
-Gbm.RPPA.patient = colnames(Gbm.RPPA[5:39])
+Gbm.RPPA.patient = colnames(TCGA.start)
 
 # get only TCGA columns
-Gbm.RPPA.TCGA.DATA <- Gbm.RPPA[,5:39]
+Gbm.RPPA.TCGA.DATA <- TCGA.start
 # get entrezids
 #Gbm.RPPA.TCGA.EntrezIds <- as.vector(Gbm.RPPA[3])
 
@@ -82,6 +83,14 @@ testSet.label  <- factor(Gbm.Survival.TCGA.Data[match (colnames(testSet), Gbm.Su
 #apply ttest
 trainSet.tt <- rowttests(as.matrix(trainSet), trainSet.label)
 trainSet.pval <- cbind(trainSet, trainSet.tt$p.value)
+
+trainSet.tt.statistic <- abs(trainSet.tt["statistic"])
+trainSet.tt.dm <- abs(trainSet.tt["dm"])
+
+
+install.packages("prob")
+require("prob")
+trainSet.tt.probability <- probspace(trainSet.tt.statistic)["probs"]
 
 #testSet.tt <- rowttests(as.matrix(testSet), testSet.label)
 #testSet.pval <- cbind(testSet, testSet.tt$p.value)
