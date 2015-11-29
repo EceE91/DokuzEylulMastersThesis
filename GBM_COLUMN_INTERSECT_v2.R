@@ -84,16 +84,462 @@ testSet.label  <- factor(Gbm.Survival.TCGA.Data[match (colnames(testSet), Gbm.Su
 trainSet.tt <- rowttests(as.matrix(trainSet), trainSet.label)
 trainSet.pval <- cbind(trainSet, trainSet.tt$p.value)
 
-trainSet.tt.statistic <- abs(trainSet.tt["statistic"])
-trainSet.tt.dm <- abs(trainSet.tt["dm"])
-
-
-install.packages("prob")
-require("prob")
-trainSet.tt.probability <- probspace(trainSet.tt.statistic)["probs"]
+#trainSet.tt.statistic <- abs(trainSet.tt["statistic"])
+#trainSet.tt.dm <- abs(trainSet.tt["dm"])
+#install.packages("prob")
+#require("prob")
+#trainSet.tt.probability <- probspace(trainSet.tt.statistic)["probs"]
 
 #testSet.tt <- rowttests(as.matrix(testSet), testSet.label)
 #testSet.pval <- cbind(testSet, testSet.tt$p.value)
+
+
+trainSet.tt.stat <- abs(trainSet.tt$statistic)
+
+trainSet.tt.dm <- abs(trainSet.tt$dm)
+prob.data.dm <- as.data.frame(cbind(Gbm.RPPA$EntrezID, trainSet.tt.stat))
+colnames(prob.data) <- c("EntrezID","tt.stat")
+
+
+prob.data <- as.data.frame(cbind(Gbm.RPPA$EntrezID, trainSet.tt.stat))
+colnames(prob.data) <- c("EntrezID","tt.stat")
+
+library(prob)
+library(igraph)
+
+gS <- read.graph("graph.txt", format="ncol",directed = FALSE)
+
+length(V(gS))
+# 10579
+length(E(gS))
+# 200091
+
+dg = degree(gS)
+degree <- as.data.frame(sort(dg, decreasing=TRUE))
+
+vertex.name <- as.numeric(as.vector(V(gS)$name))
+inp <- rep(0,length(V(gS)))
+
+for(i in 1:dim(prob.data)[1])
+{  
+  a = which ((prob.data$EntrezID[i]) == vertex.name)
+  if (length(a)>0){
+    inp[a] <- prob.data[i,2]
+  }
+}
+
+#create a probability vector for Personalized PageRank
+prob.vector <- probspace(inp, inp)$probs
+
+
+gS.rank <- page_rank(gS, vids = V(gS), directed=FALSE, damping=0.1)$vector      # returns numeric vector with rank scores
+rank.top100 <- as.data.frame(head(sort(gS.rank, decreasing=TRUE), 100))
+
+for(i in 1:dim(rank.top100)[1])
+{	
+  id = as.numeric(rownames(rank.top100)[i])
+  a = which (id == as.numeric(rownames(degree)))
+  write.table(cbind(id, degree[a,1], rank.top100[i,1]), file = "rank.top100.d-0.1.txt", append=TRUE, quote=FALSE, sep ="\t", row.names=FALSE,col.names=FALSE)
+}
+
+
+gS.person <- page_rank(gS, vids = V(gS), directed=FALSE, damping=0.1, personalized=prob.vector)$vector      
+person.top100 <- as.data.frame(head(sort(gS.person, decreasing=TRUE), 100))
+
+for(i in 1:dim(person.top100)[1])
+{	
+  id = as.numeric(rownames(person.top100)[i])
+  a = which (id == as.numeric(rownames(degree)))
+  write.table(cbind(id, degree[a,1], person.top100[i,1]), file = "person.top100.d-0.1.txt", append=TRUE, quote=FALSE, sep="\t", row.names=FALSE, col.names=FALSE)
+}
+
+# only takr top-100 most significant proteins base on tt.statistic
+
+sorted.rppa.100 <- head(prob.data[order(prob.data[,2], decreasing = TRUE),],100)
+
+#------------------------------------------------------------------------------------------------
+rank.data <- read.table("rank.top100.d-0.1.txt", header = FALSE, sep = "\t")
+person.data <- read.table("person.top100.d-0.1.txt", header = FALSE, sep = "\t")
+
+common.sig.rank <- intersect (rank.data[,1], prob.data$EntrezID)
+length(common.sig.rank)
+# 26
+
+common.sig.person <- intersect (person.data[,1], prob.data$EntrezID)
+length(common.sig.person)
+# 100
+
+
+common.sig.rank <- intersect (rank.data[,1], sorted.rppa.100$EntrezID)
+length(common.sig.rank)
+# 17
+
+common.sig.person <- intersect (person.data[,1], sorted.rppa.100$EntrezID)
+length(common.sig.person)
+# 97
+# 97 rppa sig. proteins are also listed in the top-ranked proteins of Personalized PageRank
+
+#------------------------------------------------------------------------------------------------
+rank.data <- read.table("rank.top100.d-0.5.txt", header = FALSE, sep = "\t")
+person.data <- read.table("person.top100.d-0.5.txt", header = FALSE, sep = "\t")
+
+common.sig.rank <- intersect (rank.data[,1], prob.data$EntrezID)
+length(common.sig.rank)
+# 30
+
+common.sig.person <- intersect (person.data[,1], prob.data$EntrezID)
+length(common.sig.person)
+# 98
+
+
+common.sig.rank <- intersect (rank.data[,1], sorted.rppa.100$EntrezID)
+length(common.sig.rank)
+# 18
+
+common.sig.person <- intersect (person.data[,1], sorted.rppa.100$EntrezID)
+length(common.sig.person)
+# 93
+
+#------------------------------------------------------------------------------------------------
+rank.data <- read.table("rank.top100.d-0.8.txt", header = FALSE, sep = "\t")
+person.data <- read.table("person.top100.d-0.8.txt", header = FALSE, sep = "\t")
+
+common.sig.rank <- intersect (rank.data[,1], prob.data$EntrezID)
+length(common.sig.rank)
+# 32
+
+common.sig.person <- intersect (person.data[,1], prob.data$EntrezID)
+length(common.sig.person)
+# 90
+
+
+common.sig.rank <- intersect (rank.data[,1], sorted.rppa.100$EntrezID)
+length(common.sig.rank)
+# 21
+
+common.sig.person <- intersect (person.data[,1], sorted.rppa.100$EntrezID)
+length(common.sig.person)
+# 81
+
+
+## How many proteins are in common on the top-10 sig. proteins?
+
+sorted.rppa.10 <- head(prob.data[order(prob.data[,2], decreasing = TRUE),],10)
+
+common.sig.rank <- intersect (rank.data[1:10,1], sorted.rppa.10$EntrezID)
+length(common.sig.rank)
+# 0
+
+common.sig.person <- intersect (person.data[1:10,1], sorted.rppa.10$EntrezID)
+length(common.sig.person)
+# 7
+
+## How many proteins are in common on the top-20 sig. proteins?
+sorted.rppa.20 <- head(prob.data[order(prob.data[,2], decreasing = TRUE),],20)
+
+common.sig.rank <- intersect (rank.data[1:20,1], sorted.rppa.20$EntrezID)
+length(common.sig.rank)
+# 1
+
+common.sig.person <- intersect (person.data[1:20,1], sorted.rppa.20$EntrezID)
+length(common.sig.person)
+# 15
+
+
+## How many proteins are in common between the top-ranked-100 and all sig. proteins?
+
+common.sig.rank <- intersect (rank.data[1:10,1], sorted.rppa$EntrezID)
+length(common.sig.rank)
+#2
+
+common.sig.person <- intersect (person.data[1:10,1], sorted.rppa$EntrezID)
+length(common.sig.person)
+#9
+
+##### For tt.dm
+trainSet.tt.dm <- abs(trainSet.tt$dm)
+prob.data.dm <- as.data.frame(cbind(Gbm.RPPA$EntrezID, trainSet.tt.dm))
+colnames(prob.data.dm) <- c("EntrezID","tt.dm")
+
+library(prob)
+library(igraph)
+
+setwd("C:/Users/Ece/Desktop")
+gS <- read.graph("graph.txt", format="ncol",directed = FALSE)
+
+length(V(gS))
+# 10579
+length(E(gS))
+# 200091
+
+dg = degree(gS)
+degree <- as.data.frame(sort(dg, decreasing=TRUE))
+
+vertex.name <- as.numeric(as.vector(V(gS)$name))
+#zero or dm value
+inp.dm <- rep(0,length(V(gS)))
+
+for(i in 1:dim(prob.data.dm)[1])
+{  
+  match = which ((prob.data.dm$EntrezID[i]) == vertex.name)
+  if (length(match)>0){
+    inp.dm[match] <- prob.data.dm[i,2]
+  }
+}
+
+#create a probability vector for Personalized PageRank
+prob.vector.dm <- probspace(inp.dm, inp.dm)$probs
+
+
+gS.rank <- page_rank(gS, vids = V(gS), directed=FALSE, damping=0.1)$vector      # returns numeric vector with rank scores
+rank.top100 <- as.data.frame(head(sort(gS.rank, decreasing=TRUE), 100))
+
+for(i in 1:dim(rank.top100)[1])
+{  
+  id = as.numeric(rownames(rank.top100)[i])
+  a = which (id == as.numeric(rownames(degree)))
+  write.table(cbind(id, degree[a,1], rank.top100[i,1]), file = 
+                "rank.top100.dm.d-0.1.txt", append=TRUE, quote=FALSE, sep ="\t", row.names=FALSE,col.names=FALSE)
+}
+
+
+gS.person.dm <- page_rank(gS, vids = V(gS), directed=FALSE, damping=0.1, personalized=prob.vector.dm)$vector      
+person.top100.dm <- as.data.frame(head(sort(gS.person.dm, decreasing=TRUE), 100))
+
+for(i in 1:dim(person.top100.dm)[1])
+{  
+  id = as.numeric(rownames(person.top100.dm)[i])
+  a = which (id == as.numeric(rownames(degree)))
+  write.table(cbind(id, degree[a,1], person.top100.dm[i,1]), file = 
+                "person.top100.dm.d-0.1.txt", append=TRUE, quote=FALSE, sep="\t", row.names=FALSE, col.names=FALSE)
+}
+
+# only take top-100 most significant proteins base on tt.dm
+sorted.rppa.100.dm <- head(prob.data.dm[order(prob.data.dm[,2], decreasing = TRUE),],100)
+
+#------------------------------------------------------------------------------------------------
+rank.data.dm <- read.table("rank.top100.dm.d-0.1.txt", header = FALSE, sep = "\t")
+person.data.dm <- read.table("person.top100.dm.d-0.1.txt", header = FALSE, sep = "\t")
+
+common.sig.rank.dm <- intersect (rank.data.dm[,1], prob.data.dm$EntrezID)
+length(common.sig.rank.dm)
+# 26
+
+common.sig.person.dm <- intersect (person.data.dm[,1], prob.data.dm$EntrezID)
+length(common.sig.person.dm)
+# 100
+
+
+common.sig.rank.dm <- intersect (rank.data.dm[,1], sorted.rppa.100.dm$EntrezID)
+length(common.sig.rank.dm)
+# 17
+
+common.sig.person.dm <- intersect (person.data.dm[,1], sorted.rppa.100.dm$EntrezID)
+length(common.sig.person.dm)
+# 98
+# 98 rppa sig. proteins are also listed in the top-ranked proteins of Personalized PageRank
+
+#------------------------------------------------------------------------------------------------
+#for damping factor 0.5
+gS.rank.05 <- page_rank(gS, vids = V(gS), directed=FALSE, damping=0.5)$vector      # returns numeric vector with rank scores
+rank.top100.05 <- as.data.frame(head(sort(gS.rank.05, decreasing=TRUE), 100))
+
+for(i in 1:dim(rank.top100.05)[1])
+{  
+  id = as.numeric(rownames(rank.top100.05)[i])
+  a = which (id == as.numeric(rownames(degree)))
+  write.table(cbind(id, degree[a,1], rank.top100.05[i,1]), file = 
+                "rank.top100.dm.d-0.5.txt", append=TRUE, quote=FALSE, sep ="\t", row.names=FALSE,col.names=FALSE)
+}
+
+
+gS.person.dm.05 <- page_rank(gS, vids = V(gS), directed=FALSE, damping=0.5, personalized=prob.vector.dm)$vector      
+person.top100.dm.05 <- as.data.frame(head(sort(gS.person.dm.05, decreasing=TRUE), 100))
+
+for(i in 1:dim(person.top100.dm.05)[1])
+{  
+  id = as.numeric(rownames(person.top100.dm.05)[i])
+  a = which (id == as.numeric(rownames(degree)))
+  write.table(cbind(id, degree[a,1], person.top100.dm.05[i,1]), file = 
+                "person.top100.dm.d-0.5.txt", append=TRUE, quote=FALSE, sep="\t", row.names=FALSE, col.names=FALSE)
+}
+
+# only take top-100 most significant proteins base on tt.dm
+sorted.rppa.100.dm.05 <- head(prob.data.dm[order(prob.data.dm[,2], decreasing = TRUE),],100)
+
+
+rank.data.dm.05 <- read.table("rank.top100.dm.d-0.5.txt", header = FALSE, sep = "\t")
+person.data.dm.05 <- read.table("person.top100.dm.d-0.5.txt", header = FALSE, sep = "\t")
+
+common.sig.rank.dm.05 <- intersect (rank.data.dm.05[,1], prob.data.dm$EntrezID)
+length(common.sig.rank.dm.05)
+# 30
+
+common.sig.person.dm.05 <- intersect (person.data.dm.05[,1], prob.data.dm$EntrezID)
+length(common.sig.person.dm.05)
+# 99
+
+
+common.sig.rank.dm.05 <- intersect (rank.data.dm.05[,1], sorted.rppa.100.dm.05$EntrezID)
+length(common.sig.rank.dm.05)
+# 19
+
+common.sig.person.dm.05 <- intersect (person.data.dm.05[,1], sorted.rppa.100.dm.05$EntrezID)
+length(common.sig.person.dm.05)
+# 93
+
+#------------------------------------------------------------------------------------------------
+#for damping factor 0.8
+gS.rank.08 <- page_rank(gS, vids = V(gS), directed=FALSE, damping=0.8)$vector      # returns numeric vector with rank scores
+rank.top100.08 <- as.data.frame(head(sort(gS.rank.08, decreasing=TRUE), 100))
+
+for(i in 1:dim(rank.top100.08)[1])
+{  
+  id = as.numeric(rownames(rank.top100.08)[i])
+  a = which (id == as.numeric(rownames(degree)))
+  write.table(cbind(id, degree[a,1], rank.top100.08[i,1]), file = 
+                "rank.top100.dm.d-0.8.txt", append=TRUE, quote=FALSE, sep ="\t", row.names=FALSE,col.names=FALSE)
+}
+
+
+gS.person.dm.08 <- page_rank(gS, vids = V(gS), directed=FALSE, damping=0.8, personalized=prob.vector.dm)$vector      
+person.top100.dm.08 <- as.data.frame(head(sort(gS.person.dm.08, decreasing=TRUE), 100))
+
+for(i in 1:dim(person.top100.dm.08)[1])
+{  
+  id = as.numeric(rownames(person.top100.dm.08)[i])
+  a = which (id == as.numeric(rownames(degree)))
+  write.table(cbind(id, degree[a,1], person.top100.dm.08[i,1]), file = 
+                "person.top100.dm.d-0.8.txt", append=TRUE, quote=FALSE, sep="\t", row.names=FALSE, col.names=FALSE)
+}
+
+# only take top-100 most significant proteins base on tt.dm
+sorted.rppa.100.dm.08 <- head(prob.data.dm[order(prob.data.dm[,2], decreasing = TRUE),],100)
+
+rank.data.dm.08 <- read.table("rank.top100.dm.d-0.8.txt", header = FALSE, sep = "\t")
+person.data.dm.08 <- read.table("person.top100.dm.d-0.8.txt", header = FALSE, sep = "\t")
+
+common.sig.rank.dm.08 <- intersect (rank.data.dm.08[,1], prob.data.dm$EntrezID)
+length(common.sig.rank.dm.08)
+# 32
+
+common.sig.person.dm.08 <- intersect (person.data.dm.08[,1], prob.data.dm$EntrezID)
+length(common.sig.person.dm.08)
+# 91
+
+
+common.sig.rank.dm.08 <- intersect (rank.data.dm.08[,1], sorted.rppa.100.dm.08$EntrezID)
+length(common.sig.rank.dm.08)
+# 22
+
+common.sig.person.dm.08 <- intersect (person.data.dm.08[,1], sorted.rppa.100.dm.08$EntrezID)
+length(common.sig.person.dm.08)
+# 83
+
+
+## How many proteins are in common on the top-10 sig. proteins?
+
+sorted.rppa.10.dm <- head(prob.data.dm[order(prob.data.dm[,2], decreasing = TRUE),],10)
+
+# for d=0.1
+common.sig.rank.dm <- intersect (rank.data.dm[1:10,1], sorted.rppa.10.dm$EntrezID)
+length(common.sig.rank.dm )
+# 1
+
+# for d=0.5
+common.sig.rank.dm.05 <- intersect (rank.data.dm.05[1:10,1], sorted.rppa.10.dm$EntrezID)
+length(common.sig.rank.dm.05)
+# 1
+
+# for d=0.8
+common.sig.rank.dm.08 <- intersect (rank.data.dm.08[1:10,1], sorted.rppa.10.dm$EntrezID)
+length(common.sig.rank.dm.08)
+# 0
+
+#for d=0.1
+common.sig.person.dm <- intersect (person.data.dm[1:10,1], sorted.rppa.10.dm$EntrezID)
+length(common.sig.person.dm)
+# 9
+
+#for d=0.5
+common.sig.person.dm.05 <- intersect (person.data.dm.05[1:10,1], sorted.rppa.10.dm$EntrezID)
+length(common.sig.person.dm.05)
+# 8
+
+#for d=0.8
+common.sig.person.dm.08 <- intersect (person.data.dm.08[1:10,1], sorted.rppa.10.dm$EntrezID)
+length(common.sig.person.dm.08)
+# 7
+
+## How many proteins are in common on the top-20 sig. proteins?
+sorted.rppa.20.dm <- head(prob.data.dm[order(prob.data.dm[,2], decreasing = TRUE),],20)
+
+#for d=0.1
+common.sig.rank.dm <- intersect (rank.data.dm[1:20,1], sorted.rppa.20.dm$EntrezID)
+length(common.sig.rank.dm)
+# 1
+
+#for d=0.5
+common.sig.rank.dm.05 <- intersect (rank.data.dm.05[1:20,1], sorted.rppa.20.dm$EntrezID)
+length(common.sig.rank.dm.05)
+# 1
+
+#for d=0.8
+common.sig.rank.dm.08 <- intersect (rank.data.dm.08[1:20,1], sorted.rppa.20.dm$EntrezID)
+length(common.sig.rank.dm.08)
+# 1
+
+#for d=0.1
+common.sig.person.dm <- intersect (person.data.dm[1:20,1], sorted.rppa.20.dm$EntrezID)
+length(common.sig.person.dm)
+# 19
+
+#for d=0.5
+common.sig.person.dm.05 <- intersect (person.data.dm.05[1:20,1], sorted.rppa.20.dm$EntrezID)
+length(common.sig.person.dm.05)
+# 18
+
+#for d=0.8
+common.sig.person.dm.08 <- intersect (person.data.dm.08[1:20,1], sorted.rppa.20.dm$EntrezID)
+length(common.sig.person.dm.08)
+# 14
+
+
+## How many proteins are in common between the top-ranked-100 and all sig. proteins?
+#for d= 0.1
+common.sig.rank.dm <- intersect (rank.data.dm[1:10,1], sorted.rppa.100.dm$EntrezID)
+length(common.sig.rank.dm)
+#2
+
+#for d= 0.5
+common.sig.rank.dm.05 <- intersect (rank.data.dm.05[1:10,1], sorted.rppa.100.dm$EntrezID)
+length(common.sig.rank.dm.05)
+#3
+
+
+#for d= 0.8
+common.sig.rank.dm.08 <- intersect (rank.data.dm.08[1:10,1], sorted.rppa.100.dm$EntrezID)
+length(common.sig.rank.dm.08)
+#2
+
+#for d=0.1
+common.sig.person.dm <- intersect (person.data.dm[1:10,1], sorted.rppa.100.dm$EntrezID)
+length(common.sig.person.dm)
+#10
+
+
+#for d=0.5
+common.sig.person.dm.05 <- intersect (person.data.dm.05[1:10,1], sorted.rppa.100.dm$EntrezID)
+length(common.sig.person.dm.05)
+#10
+
+
+#for d=0.8
+common.sig.person.dm.08 <- intersect (person.data.dm.08[1:10,1], sorted.rppa.100.dm$EntrezID)
+length(common.sig.person.dm.08)
+#9
+
+
 
 
 
